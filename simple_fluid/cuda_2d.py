@@ -25,7 +25,6 @@ bounce = np.array([0, 2, 1, 4, 3, 8, 7, 6, 5]).astype(np.int32)
 def build_stream(grid, args):
 	Ny, Nx = grid.shape[1:]
 	prevf = np.empty([Ny, Nx, e.shape[0], 3], dtype=np.int32)
-	print(grid.shape, grid.T.shape)
 
 	for i in range(e.shape[0]):
 		prevf[:, :, i, :-1] = np.mod(grid.T - e[i], grid.shape[1:]).transpose(1, 0, 2)
@@ -33,26 +32,41 @@ def build_stream(grid, args):
 
 	return prevf
 
-@jit(nopython=True)
 def iterate_evolution(t_max, F1, F2, pattern, prevf, itau_f, bounce=bounce, e=e, weights=weights):
 
+	#Prep cuda info
+	threadsperblock = (32, 32)
+	blockspergrid_y = math.ceil(F1.shape[0] / threadsperblock[0])
+	blockspergrid_x = math.ceil(F1.shape[1] / threadsperblock[1])
+	blockspergrid = (blockspergrid_y, blockspergrid_x)
+
+	#Copy arrays to device
+	d_F1 = cuda.to_device(F1)
+	d_F2 = cuda.to_device(F2)
+	d_pattern = cuda.to_device(pattern)
+	d_prevf = cuda.to_device(prevf)
+	d_bounce = cuda.to_device(bounce)
+	d_e = cuda.to_device(e)
+	d_weights = cuda.to_device(weights)
 
 	for t in range(t_max):
-		evolve_velocity(F1, F2, pattern, prevf, itau_f, bounce=bounce, e=e, weights=weights)
-		evolve_velocity(F2, F1, pattern, prevf, itau_f, bounce=bounce, e=e, weights=weights)
+		evolve_velocity[blockspergrid, threadsperblock](d_F1, d_F2, d_pattern, d_prevf, itau_f, d_bounce, d_e, d_weights)
+		evolve_velocity[blockspergrid, threadsperblock](d_F2, d_F1, d_pattern, d_prevf, itau_f, d_bounce, d_e, d_weights)
+
+	#Copy array back from device
+	d_F1.copy_to_host(F1)
 
 	return F1
 
-@jit(nopython=True)
+@cuda.jit
 def evolve_velocity(F1, F2, pattern, prevf, itau_f, bounce=bounce, e=e, weights=weights):
-	for y in range(F1.shape[0]):
-		for x in range(F1.shape[1]):
-			if pattern[y, x]:
-				for i in range(F1.shape[2]):
-					yxi = prevf[y, x, bounce[i]]
-					F2[y, x, i] = F1[yxi[0], yxi[1], yxi[2]]
-				continue
-
+	y, x = cuda.grid(2)
+	if y < F1.shape[0] and x < F1.shape[1]:
+		if pattern[y, x]:
+			for i in range(F1.shape[2]):
+				yxi = prevf[y, x, bounce[i]]
+				F2[y, x, i] = F1[yxi[0], yxi[1], yxi[2]]
+		else:
 			for i in range(F1.shape[2]):
 				yxi = prevf[y, x, i]
 				F2[y, x, i] = F1[yxi[0], yxi[1], yxi[2]]

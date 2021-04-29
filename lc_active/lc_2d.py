@@ -252,7 +252,7 @@ def display(ax, Q):
 if __name__=='__main__':
 	parser = ArgumentParser('Lattice Boltzmann simulations of liquid crystal hydrodynamics')
 	parser.add_argument('-r', '--restart', action='store_true')
-	parser.add_argument('-s', '--shape', type=int, nargs=2, default=[40, 40])
+	parser.add_argument('-s', '--shape', type=int, nargs=2, default=[100, 100])
 	parser.add_argument('--tau_f', type=float, default=1.)
 	parser.add_argument('--rho', type=float, default=1.)
 	parser.add_argument('--t_max', type=int, default=1000)
@@ -364,7 +364,6 @@ if __name__=='__main__':
 				args.fr, args.Temp, args.itau_f, e.astype(np.float64), weights)
 
 		print(time() - t)
-		print(np.sum(Q[..., 2] + Q[..., 0]))
 		display(ax, Q)
 		if input() == 'q':
 			exit(0)

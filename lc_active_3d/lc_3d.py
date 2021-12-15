@@ -428,11 +428,19 @@ def read_restart(restart_file, Q, U, Rho):
 			assert int(header[4]) == 0
 			assert int(header[5]) == 0
 
-		Q[:] = np.loadtxt(itertools.islice(fin, 0, Nx * Ny)).reshape([Ny, Nx, 3])
-		#Convert to Q 2d
-
-		Rho[:] = np.loadtxt(itertools.islice(fin, 0, Nx * Ny)).reshape([Ny, Nx])
-		U[:] = np.loadtxt(itertools.islice(fin, 0, Nx * Ny)).reshape([Ny, Nx, 2])
+		Q0 = np.loadtxt(itertools.islice(fin, 0, Nx * Ny)).reshape([Ny, Nx, 3])
+		Rho0 = np.loadtxt(itertools.islice(fin, 0, Nx * Ny)).reshape([Ny, Nx])
+		U0 = np.loadtxt(itertools.islice(fin, 0, Nx * Ny)).reshape([Ny, Nx, 2])
+		for z in range(1, Q.shape[0]):
+			Q[z, ..., 0] = Q0[..., 0]
+			Q[z, ..., 1] = Q0[..., 1]
+			Q[z, ..., 2] = 0.
+			Q[z, ..., 3] = Q0[..., 2]
+			Q[z, ..., 4] = 0.
+			Rho[z] = Rho[0]
+			U[z, ..., 0] = U0[..., 0]
+			U[z, ..., 1] = U0[..., 1]
+			U[z, ..., 2] = 0.
 
 def display(ax, Q):
 	ax.clear()
@@ -467,12 +475,6 @@ if __name__=='__main__':
 	setattr(args, 'qdt', 1. / args.n_evol_Q)
 	setattr(args, 'xi1', 0.5 * (args.xi + 1.))
 	setattr(args, 'xi2', 0.5 * (args.xi - 1.))
-
-	fig = plt.figure(figsize=(6, 6))
-	ax = fig.gca()
-	plt.ion()
-	plt.show()
-
 
 	#Geometry information
 	
@@ -537,7 +539,8 @@ if __name__=='__main__':
 	
 	#Initialize F as Feq
 	set_F_Feq(F1, U, Rho, e.astype(np.float64), weights)
-	
+	e_L1, e_ld = np.zeros(1, dtype=np.float64), np.zeros(1, dtype=np.float64)
+
 	t_current = 0
 	while t_current < args.t_max:
 
@@ -547,7 +550,7 @@ if __name__=='__main__':
 			cal_W(W, U, nextf)
 			for i in range(args.n_evol_Q):
 				cal_dQ(Q, U, H, fd_nbr, 
-					   args.A_ldg, args.U, args.L1, args.Gamma_rot, oneThirdDelta)
+					   args.A_ldg, args.U, args.L1, args.Gamma_rot, oneThirdDelta, e_L1, e_ld)
 				evol_Q(Q, H, W, 
 					   args.xi, args.xi1, args.xi2, args.qdt)
 			
@@ -559,7 +562,7 @@ if __name__=='__main__':
 			cal_W(W, U, nextf)
 			for i in range(args.n_evol_Q):
 				cal_dQ(Q, U, H, fd_nbr, 
-					   args.A_ldg, args.U, args.L1, args.Gamma_rot, oneThirdDelta)
+					   args.A_ldg, args.U, args.L1, args.Gamma_rot, oneThirdDelta, e_L1, e_ld)
 				evol_Q(Q, H, W, 
 					   args.xi, args.xi1, args.xi2, args.qdt)
 
@@ -569,8 +572,4 @@ if __name__=='__main__':
 				args.fr, args.Temp, args.itau_f, e.astype(np.float64), weights)
 
 		print(time() - t)
-		display(ax, Q)
-		if input() == 'q':
-			exit(0)
-
 		t_current += args.t_write
